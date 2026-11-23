@@ -34,6 +34,7 @@ final class GalaxyModel: ObservableObject {
     @Published private(set) var folderPath: [GalaxyEntry] = []
     @Published private(set) var loadingFolder = false
     @Published private(set) var transfer: Transfer?
+    @Published private(set) var isUpdating = false
     @Published var selection: UInt32?
     @Published var previewURL: URL?
     @Published var alertMessage: String?
@@ -48,11 +49,14 @@ final class GalaxyModel: ObservableObject {
     var selectedEntry: GalaxyEntry? { entries.first { $0.id == selection } }
     var canBrowse: Bool {
         guard case .ready = fileStatus else { return false }
-        return !loadingFolder && transfer == nil
+        return !loadingFolder && transfer == nil && !isUpdating
     }
     var canPreview: Bool {
         guard let selectedEntry else { return false }
         return supportsPreview(selectedEntry)
+    }
+    var canUpdate: Bool {
+        !isUpdating && !loadingFolder && transfer == nil && !choosingDestination && previewURL == nil
     }
 
     func monitor() async {
@@ -67,7 +71,7 @@ final class GalaxyModel: ObservableObject {
     }
 
     func refreshFiles() {
-        guard transfer == nil, !loadingFolder else { return }
+        guard transfer == nil, !loadingFolder, !isUpdating else { return }
         nextConnectionAttempt = nil
         refreshDevices()
         if canBrowse {
@@ -138,6 +142,47 @@ final class GalaxyModel: ObservableObject {
         let url = URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension")!
         if !NSWorkspace.shared.open(url) {
             NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+        }
+    }
+
+    func updateApp() {
+        guard canUpdate else { return }
+        isUpdating = true
+        let app = Bundle.main.bundleURL
+        let revision = Bundle.main.object(forInfoDictionaryKey: AppUpdater.revisionKey) as? String
+        Task {
+            defer { isUpdating = false }
+            do {
+                guard let update = try await Task.detached(priority: .userInitiated, operation: {
+                    try AppUpdater.prepare(appAt: app, runningRevision: revision)
+                }).value else {
+                    alertMessage = "이미 GitHub의 최신 버전입니다."
+                    return
+                }
+                try await relaunch(with: update)
+                NSApplication.shared.terminate(nil)
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func relaunch(with update: PreparedAppUpdate) async throws {
+        var keepBackup = false
+        defer { if !keepBackup { update.discardReplacement() } }
+        try update.exchangeBundles()
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        do {
+            _ = try await NSWorkspace.shared.openApplication(at: update.app, configuration: configuration)
+        } catch {
+            do {
+                try update.exchangeBundles()
+            } catch {
+                keepBackup = true
+                throw AppUpdateError("새 앱을 열지 못했습니다. 기존 앱은 다음 위치에 있습니다.\n\(update.replacement.path)")
+            }
+            throw AppUpdateError("새 앱을 열지 못해 기존 버전으로 복구했습니다.")
         }
     }
 

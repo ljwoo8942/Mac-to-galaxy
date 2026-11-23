@@ -21,7 +21,7 @@ struct ContentView: View {
         .onChange(of: model.previewURL) { old, new in
             if let old, old != new { model.removePreview(old) }
         }
-        .alert("파일 작업", isPresented: Binding(
+        .alert("Mac-to-galaxy", isPresented: Binding(
             get: { model.alertMessage != nil },
             set: { if !$0 { model.alertMessage = nil } }
         )) {
@@ -55,6 +55,20 @@ struct ContentView: View {
                         .font(.headline)
                     tetheringDetails
                     Button("네트워크 설정", action: model.openNetworkSettings)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Button(action: model.updateApp) {
+                        Label("앱 업데이트", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(!model.canUpdate)
+                    .help("GitHub의 최신 버전을 확인하고 설치합니다.")
+                    if model.isUpdating {
+                        ProgressView("업데이트 준비 중…")
+                            .controlSize(.small)
+                    }
                 }
             }
             .padding(20)
@@ -175,7 +189,7 @@ struct ContentView: View {
         Button(action: model.refreshFiles) {
             Image(systemName: "arrow.clockwise")
         }
-        .disabled(model.device == nil || model.loadingFolder || model.transfer != nil)
+        .disabled(model.device == nil || model.loadingFolder || model.transfer != nil || model.isUpdating)
         .help("파일 새로고침")
         .accessibilityLabel("파일 새로고침")
     }

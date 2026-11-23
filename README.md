@@ -16,6 +16,17 @@ open dist/Mac-to-galaxy.app
 
 빌드 스크립트는 이 Mac에서 실행할 `.app`을 `dist/`에 만들고 로컬 서명을 적용합니다. 실행 시 이 Mac의 Homebrew에 설치된 `libmtp`와 `libusb`를 사용합니다.
 
+## GitHub에서 앱 업데이트
+
+처음 한 번 터미널에서 GitHub CLI를 설치하고 비공개 저장소에 접근할 수 있는 계정으로 로그인합니다.
+
+```bash
+brew install gh
+gh auth login --hostname github.com --web
+```
+
+앱 사이드바의 **앱 업데이트**를 누르면 GitHub `main`의 커밋을 확인합니다. 새 커밋이 있으면 이 Mac에서 빌드하고 서명을 검증한 뒤 앱을 교체하고 다시 엽니다. 저장소의 `main`에 변경을 반영하면 다음 업데이트 확인부터 받을 수 있습니다. 앱은 `dist` 또는 사용자 계정이 쓸 수 있는 폴더에서 실행하세요.
+
 ## 갤럭시 파일 보기
 
 1. 데이터 전송용 USB 케이블로 연결합니다. Mac에 액세서리 연결 승인 창이 나타나면 허용합니다.
@@ -45,6 +56,7 @@ swift test
 ```
 
 리눅스의 `swift test`는 USB 방식 감지, 네트워크 인터페이스와 기기의 연결 관계, 다중 기기 처리, 인터넷 응답 판정, 파일명 처리에 대한 공통 로직을 검사합니다. macOS 앱은 위의 빌드 명령으로 확인합니다.
+macOS에서 `./scripts/test-app-update.sh`를 실행하면 테스트용 GitHub 응답으로 최신 버전 판정, 실패 시 기존 앱 보존, 교체와 복구를 확인합니다.
 
 ### Z 플립7 실기 체크리스트
 
