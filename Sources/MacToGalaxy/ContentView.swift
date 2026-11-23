@@ -183,6 +183,7 @@ struct ContentView: View {
         } else {
             Button("미리보기", action: model.previewSelected)
                 .disabled(!model.canBrowse || !model.canPreview)
+                .help("선택한 파일 미리보기 · 스페이스바")
             Button("Mac에 저장", action: model.saveSelected)
                 .disabled(!model.canBrowse || model.selectedEntry?.kind != .file)
         }
@@ -240,10 +241,22 @@ struct ContentView: View {
             }
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture(count: 2).onEnded { model.activate(entry) })
             .tag(entry.id)
         }
         .listStyle(.inset)
+        .contextMenu(forSelectionType: GalaxyEntry.ID.self) { _ in
+            EmptyView()
+        } primaryAction: { ids in
+            guard let id = ids.first, let entry = model.entries.first(where: { $0.id == id }) else { return }
+            model.activate(entry)
+        }
+        .onKeyPress(.space, phases: .down) { press in
+            guard press.modifiers.isEmpty, model.canBrowse, model.canPreview, model.previewURL == nil else {
+                return .ignored
+            }
+            model.previewSelected()
+            return .handled
+        }
         .onKeyPress(.return) {
             guard let entry = model.selectedEntry, model.canBrowse else { return .ignored }
             model.activate(entry)
