@@ -131,8 +131,8 @@ final class MTPClient {
         try await perform {
             let session = try self.session(for: generation)
             guard !control.snapshot.cancelled else { throw MTPError.cancelled }
-            let directory = destination.deletingLastPathComponent()
-                .appendingPathComponent(".MacToGalaxy-\(UUID().uuidString)", isDirectory: true)
+            let parent = destination.deletingLastPathComponent()
+            let directory = parent.appendingPathComponent(".MacToGalaxy-\(UUID().uuidString)", isDirectory: true)
             let manager = FileManager.default
             try manager.createDirectory(at: directory, withIntermediateDirectories: false,
                                         attributes: [.posixPermissions: 0o700])
@@ -155,7 +155,11 @@ final class MTPClient {
             guard closeStatus == 0 else { throw POSIXError(POSIXErrorCode(rawValue: closeError) ?? .EIO) }
             guard size >= 0, UInt64(size) == entry.size else { throw MTPError.incompleteCopy }
 
-            if renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) != 0 {
+            // Foundation decomposes file URL paths, even on volumes that preserve NFC names.
+            let parentPath = parent.path
+            let separator = parentPath.hasSuffix("/") ? "" : "/"
+            let destinationPath = parentPath + separator + destination.lastPathComponent.precomposedStringWithCanonicalMapping
+            if renamex_np(staging.path, destinationPath, UInt32(RENAME_EXCL)) != 0 {
                 let renameError = errno
                 if renameError == EEXIST { throw MTPError.destinationExists }
                 throw POSIXError(POSIXErrorCode(rawValue: renameError) ?? .EIO)
