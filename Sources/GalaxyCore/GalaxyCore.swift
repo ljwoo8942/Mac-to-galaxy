@@ -106,6 +106,19 @@ public struct GalaxyEntry: Identifiable, Equatable, Sendable {
         let cleaned = lastComponent?.components(separatedBy: .controlCharacters).joined() ?? ""
         return cleaned.isEmpty || cleaned == "." || cleaned == ".." ? "Galaxy-\(id)" : cleaned
     }
+
+    public static func uploadFilename(_ name: String) -> String? {
+        let filename = name.precomposedStringWithCanonicalMapping
+        let forbidden = CharacterSet(charactersIn: "/\\<>:\"|?*").union(.controlCharacters)
+        guard !filename.isEmpty, filename != ".", filename != "..",
+              filename.utf16.count <= 254, filename.utf8.count <= 255,
+              filename.rangeOfCharacter(from: forbidden) == nil else { return nil }
+        return filename
+    }
+
+    public func conflictsWithUpload(named filename: String) -> Bool {
+        name.precomposedStringWithCanonicalMapping.caseInsensitiveCompare(filename) == .orderedSame
+    }
 }
 
 public enum InternetProbeResponse: Equatable {

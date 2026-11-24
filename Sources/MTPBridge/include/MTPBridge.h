@@ -13,7 +13,9 @@ typedef enum {
     GALAXY_MTP_OPEN_FAILED,
     GALAXY_MTP_STORAGE_UNAVAILABLE,
     GALAXY_MTP_READ_FAILED,
-    GALAXY_MTP_CANCELLED
+    GALAXY_MTP_CANCELLED,
+    GALAXY_MTP_WRITE_FAILED,
+    GALAXY_MTP_UPLOAD_UNVERIFIED
 } GalaxyMTPResult;
 
 typedef void (*GalaxyMTPStorageVisitor)(uint32_t id, const char *name, void *context);
@@ -30,5 +32,12 @@ GalaxyMTPResult galaxy_mtp_list(GalaxyMTPSession *session, uint32_t storage_id, 
                                GalaxyMTPFileVisitor visit, void *context);
 GalaxyMTPResult galaxy_mtp_download(GalaxyMTPSession *session, uint32_t object_id, int fd,
                                    GalaxyMTPProgress progress, const void *context);
+GalaxyMTPResult galaxy_mtp_stage_upload(GalaxyMTPSession *session, uint32_t storage_id, uint32_t parent_id,
+                                       const char *name, uint64_t size, int fd, uint32_t *object_id,
+                                       GalaxyMTPProgress progress, const void *context);
+// A null final_name removes only the verified temporary file.
+GalaxyMTPResult galaxy_mtp_finish_upload(GalaxyMTPSession *session, uint32_t storage_id, uint32_t parent_id,
+                                        uint32_t object_id, uint64_t size,
+                                        const char *temporary_name, const char *final_name);
 
 #endif

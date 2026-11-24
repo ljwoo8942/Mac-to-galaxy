@@ -206,6 +206,9 @@ struct ContentView: View {
             Button("Mac에 저장", action: model.saveSelected)
                 .disabled(!model.canBrowse || model.selectedEntry?.kind != .file)
         }
+        Button("Mac에서 보내기", action: model.sendFromMac)
+            .disabled(!model.canSend)
+            .help("Mac의 파일을 현재 갤럭시 폴더에 복사합니다.")
         Button(action: model.refreshFiles) {
             Image(systemName: "arrow.clockwise")
         }
@@ -288,7 +291,7 @@ struct ContentView: View {
             let snapshot = transfer.control.snapshot
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(snapshot.cancelled ? "전송 취소 중" : transfer.name)
+                    Text(snapshot.cancelled ? "전송 취소 중" : snapshot.finalizing ? "전송 마무리 중" : transfer.name)
                         .font(.caption)
                         .lineLimit(1)
                     if let fraction = snapshot.fraction {
@@ -300,7 +303,7 @@ struct ContentView: View {
                 }
                 Spacer()
                 Button("취소", action: model.cancelTransfer)
-                    .disabled(snapshot.cancelled)
+                    .disabled(snapshot.cancelled || snapshot.finalizing)
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 12)

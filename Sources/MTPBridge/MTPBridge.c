@@ -2,6 +2,7 @@
 #include <libmtp.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct GalaxyMTPSession {
     LIBMTP_mtpdevice_t *device;
@@ -103,4 +104,66 @@ GalaxyMTPResult galaxy_mtp_download(GalaxyMTPSession *session, uint32_t object_i
             return GALAXY_MTP_CANCELLED;
     }
     return GALAXY_MTP_READ_FAILED;
+}
+
+GalaxyMTPResult galaxy_mtp_stage_upload(GalaxyMTPSession *session, uint32_t storage_id, uint32_t parent_id,
+                                       const char *name, uint64_t size, int fd, uint32_t *object_id,
+                                       GalaxyMTPProgress progress, const void *context) {
+    *object_id = 0;
+    LIBMTP_file_t *file = LIBMTP_new_file_t();
+    if (!file)
+        return GALAXY_MTP_WRITE_FAILED;
+    file->filename = strdup(name);
+    if (!file->filename) {
+        LIBMTP_destroy_file_t(file);
+        return GALAXY_MTP_WRITE_FAILED;
+    }
+    file->storage_id = storage_id;
+    file->parent_id = parent_id;
+    file->filetype = LIBMTP_FILETYPE_UNKNOWN;
+    file->filesize = size;
+
+    LIBMTP_mtpdevice_t *device = session->device;
+    LIBMTP_Clear_Errorstack(device);
+    int result = LIBMTP_Send_File_From_File_Descriptor(device, fd, file, progress, context);
+    *object_id = file->item_id;
+    LIBMTP_destroy_file_t(file);
+    return result == 0 ? GALAXY_MTP_OK : GALAXY_MTP_WRITE_FAILED;
+}
+
+static bool upload_matches(const LIBMTP_file_t *file, uint32_t storage_id, uint32_t parent_id,
+                           const char *name) {
+    return file && file->storage_id == storage_id &&
+           (file->parent_id == parent_id || (parent_id == UINT32_MAX && file->parent_id == 0)) &&
+           file->filetype != LIBMTP_FILETYPE_FOLDER && file->filename && strcmp(file->filename, name) == 0;
+}
+
+GalaxyMTPResult galaxy_mtp_finish_upload(GalaxyMTPSession *session, uint32_t storage_id, uint32_t parent_id,
+                                        uint32_t object_id, uint64_t size,
+                                        const char *temporary_name, const char *final_name) {
+    if (object_id == 0 || object_id == UINT32_MAX)
+        return GALAXY_MTP_WRITE_FAILED;
+
+    LIBMTP_mtpdevice_t *device = session->device;
+    LIBMTP_Clear_Errorstack(device);
+    LIBMTP_file_t *file = LIBMTP_Get_Filemetadata(device, object_id);
+    if (!upload_matches(file, storage_id, parent_id, temporary_name) || (final_name && file->filesize != size)) {
+        if (file) LIBMTP_destroy_file_t(file);
+        return GALAXY_MTP_WRITE_FAILED;
+    }
+
+    if (!final_name) {
+        LIBMTP_destroy_file_t(file);
+        return LIBMTP_Delete_Object(device, object_id) == 0 ? GALAXY_MTP_OK : GALAXY_MTP_WRITE_FAILED;
+    }
+
+    int result = LIBMTP_Set_File_Name(device, file, final_name);
+    LIBMTP_destroy_file_t(file);
+    if (result != 0)
+        return GALAXY_MTP_UPLOAD_UNVERIFIED;
+
+    file = LIBMTP_Get_Filemetadata(device, object_id);
+    bool confirmed = upload_matches(file, storage_id, parent_id, final_name) && file->filesize == size;
+    if (file) LIBMTP_destroy_file_t(file);
+    return confirmed ? GALAXY_MTP_OK : GALAXY_MTP_UPLOAD_UNVERIFIED;
 }

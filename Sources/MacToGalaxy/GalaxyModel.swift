@@ -56,6 +56,7 @@ final class GalaxyModel: ObservableObject {
         guard let selectedEntry else { return false }
         return supportsPreview(selectedEntry)
     }
+    var canSend: Bool { canBrowse && !choosingDestination && !folderPath.isEmpty && previewURL == nil }
     var canUpdate: Bool {
         !isUpdating && !loadingFolder && transfer == nil && !choosingDestination && previewURL == nil
     }
@@ -106,6 +107,44 @@ final class GalaxyModel: ObservableObject {
     func saveSelected() {
         guard let selectedEntry, selectedEntry.kind == .file else { return }
         save(selectedEntry)
+    }
+
+    func sendFromMac() {
+        guard canSend, let device else { return }
+        let path = folderPath
+        let generation = generation
+        choosingDestination = true
+        let panel = NSOpenPanel()
+        panel.title = "갤럭시로 보낼 파일 선택"
+        panel.message = "대상 폴더 · \(path.map(\.name).joined(separator: " / "))"
+        panel.prompt = "보내기"
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.resolvesAliases = false
+        panel.begin { [weak self] response in
+            Task { @MainActor in
+                guard let self else { return }
+                self.choosingDestination = false
+                guard response == .OK, let url = panel.url else { return }
+                self.refreshDevices()
+                guard self.generation == generation, self.folderPath == path, self.canSend else {
+                    self.alertMessage = "갤럭시 연결이나 대상 폴더가 바뀌었습니다. 폴더를 다시 열고 보내세요."
+                    return
+                }
+
+                let control = TransferControl()
+                self.transfer = Transfer(name: url.lastPathComponent, control: control)
+                defer { self.transfer = nil }
+                do {
+                    let id = try await self.mtp.upload(url, to: path, on: device, generation: generation, control: control)
+                    if self.generation == generation { self.load(path, selecting: id) }
+                } catch MTPError.cancelled {
+                    if self.generation == generation { self.load(path) }
+                } catch {
+                    self.alertMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func cancelTransfer() {
@@ -254,7 +293,7 @@ final class GalaxyModel: ObservableObject {
         }
     }
 
-    private func load(_ path: [GalaxyEntry]) {
+    private func load(_ path: [GalaxyEntry], selecting id: UInt32? = nil) {
         loadingFolder = true
         let generation = generation
         Task {
@@ -267,7 +306,7 @@ final class GalaxyModel: ObservableObject {
                     contents = try await mtp.storages(generation: generation)
                 }
                 guard self.generation == generation else { return }
-                selection = nil
+                selection = id.flatMap { id in contents.contains { $0.id == id } ? id : nil }
                 folderPath = path
                 entries = contents
                 loadingFolder = false
