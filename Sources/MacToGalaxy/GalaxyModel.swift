@@ -121,7 +121,7 @@ final class GalaxyModel: ObservableObject {
                 }
 
                 let control = TransferControl()
-                self.transfer = Transfer(name: url.lastPathComponent, control: control)
+                self.transfer = Transfer(name: url.lastPathComponent.precomposedStringWithCanonicalMapping, control: control)
                 defer { self.transfer = nil }
                 do {
                     let id = try await self.mtp.upload(url, to: path, on: device, generation: generation, control: control)
@@ -264,8 +264,10 @@ final class GalaxyModel: ObservableObject {
     }
 
     private func supportsPreview(_ entry: GalaxyEntry) -> Bool {
-        guard entry.kind == .file,
-              let type = UTType(filenameExtension: (entry.localFilename as NSString).pathExtension) else { return false }
+        guard entry.kind == .file else { return false }
+        let fileExtension = (entry.localFilename as NSString).pathExtension
+        if FileTextPreview.supports(fileExtension) { return true }
+        guard let type = UTType(filenameExtension: fileExtension) else { return false }
         return [UTType.image, .movie, .audio, .pdf, .plainText].contains { type.conforms(to: $0) }
     }
 
@@ -307,14 +309,23 @@ final class GalaxyModel: ObservableObject {
         Task {
             defer {
                 transfer = nil
-                if isPreview && previewURL != url {
+                if isPreview && previewURL?.deletingLastPathComponent() != url.deletingLastPathComponent() {
                     removePreview(url)
                 }
             }
             do {
                 try await mtp.download(entry, to: url, generation: generation, control: control)
-                guard self.generation == generation else { return }
-                if isPreview { previewURL = url }
+                guard isPreview, self.generation == generation, !control.snapshot.cancelled else { return }
+                let fileExtension = url.pathExtension
+                if FileTextPreview.supports(fileExtension) || UTType(filenameExtension: fileExtension)?.conforms(to: .plainText) == true {
+                    let prepared = try await Task.detached(priority: .userInitiated) {
+                        try FileTextPreview.prepare(url)
+                    }.value
+                    guard self.generation == generation, !control.snapshot.cancelled else { return }
+                    previewURL = prepared
+                } else {
+                    previewURL = url
+                }
             } catch {
                 guard self.generation == generation, !control.snapshot.cancelled else { return }
                 alertMessage = error.localizedDescription
