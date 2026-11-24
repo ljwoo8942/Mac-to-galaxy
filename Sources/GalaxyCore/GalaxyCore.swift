@@ -27,7 +27,7 @@ public struct GalaxyEntry: Identifiable, Equatable, Sendable {
 
     public init(id: UInt32, name: String, kind: Kind, size: UInt64 = 0) {
         self.id = id
-        self.name = name
+        self.name = name.precomposedStringWithCanonicalMapping
         self.kind = kind
         self.size = size
     }
@@ -35,7 +35,8 @@ public struct GalaxyEntry: Identifiable, Equatable, Sendable {
     public var localFilename: String {
         let lastComponent = name.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init)
         let cleaned = lastComponent?.components(separatedBy: .controlCharacters).joined() ?? ""
-        return cleaned.isEmpty || cleaned == "." || cleaned == ".." ? "Galaxy-\(id)" : cleaned
+        return cleaned.isEmpty || cleaned == "." || cleaned == ".."
+            ? "Galaxy-\(id)" : cleaned.precomposedStringWithCanonicalMapping
     }
 
     public static func uploadFilename(_ name: String) -> String? {
@@ -48,6 +49,15 @@ public struct GalaxyEntry: Identifiable, Equatable, Sendable {
     }
 
     public func conflictsWithUpload(named filename: String) -> Bool {
-        name.precomposedStringWithCanonicalMapping.caseInsensitiveCompare(filename) == .orderedSame
+        name.caseInsensitiveCompare(filename) == .orderedSame
+    }
+}
+
+public extension URL {
+    var pathWithNFCFilename: String {
+        // Foundation can decompose file URL paths on volumes that preserve the supplied name.
+        let parentPath = deletingLastPathComponent().path
+        let separator = parentPath.hasSuffix("/") ? "" : "/"
+        return parentPath + separator + lastPathComponent.precomposedStringWithCanonicalMapping
     }
 }

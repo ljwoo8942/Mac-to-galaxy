@@ -19,6 +19,16 @@ final class GalaxyCoreTests: XCTestCase {
         }
     }
 
+    func testDisplayAndTransferNamesComposeKoreanIncludingTheExtension() {
+        for name in ["한글 보고서.DOCX", "한글 보고서.문서"] {
+            let decomposed = name.decomposedStringWithCanonicalMapping
+            let entry = GalaxyEntry(id: 42, name: decomposed, kind: .file)
+            XCTAssertEqual(Array(entry.name.utf8), Array(name.utf8))
+            XCTAssertEqual(Array(entry.localFilename.utf8), Array(name.utf8))
+            XCTAssertEqual(GalaxyEntry.uploadFilename(decomposed).map { Array($0.utf8) }, Array(name.utf8))
+        }
+    }
+
     func testAnUploadConflictsWithCanonicalAndCaseVariantsOfFilesAndFolders() {
         let name = "한글 문서.txt"
         let original = GalaxyEntry(id: 42, name: name.decomposedStringWithCanonicalMapping.uppercased(), kind: .file)
