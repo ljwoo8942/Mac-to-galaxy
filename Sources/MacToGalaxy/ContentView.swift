@@ -50,15 +50,6 @@ struct ContentView: View {
 
                 Divider()
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("USB 테더링", systemImage: "network")
-                        .font(.headline)
-                    tetheringDetails
-                    Button("네트워크 설정", action: model.openNetworkSettings)
-                }
-
-                Divider()
-
                 VStack(alignment: .leading, spacing: 10) {
                     Button(action: model.updateApp) {
                         Label("앱 업데이트", systemImage: "arrow.down.circle")
@@ -78,81 +69,8 @@ struct ContentView: View {
     }
 
     private var deviceStatus: String {
-        if case .selectOneDevice = model.tethering { return "여러 기기 연결됨" }
+        if case .multipleDevices = model.fileStatus { return "여러 기기 연결됨" }
         return model.device == nil ? "USB 연결 대기" : "USB 연결됨"
-    }
-
-    @ViewBuilder
-    private var tetheringDetails: some View {
-        switch model.tethering {
-        case .noDevice:
-            description("갤럭시를 데이터 전송용 USB 케이블로 연결하세요.")
-        case .selectOneDevice:
-            description("갤럭시 한 대만 연결하세요.")
-        case .waitingForTethering:
-            description("갤럭시에서 설정 → 연결 → 모바일 핫스팟 및 테더링 → USB 테더링을 켜세요.")
-        case let .noNetworkInterface(modes):
-            let names = modes.map(\.rawValue).sorted().joined(separator: ", ")
-            statusText("\(names) 감지됨", active: false)
-            if modes == [.rndis] {
-                description("USB 테더링은 켜져 있습니다. 이 Mac에 RNDIS용 유선 인터페이스가 없어 USB 인터넷을 사용할 수 없습니다.")
-            } else {
-                description("macOS에서 갤럭시의 USB 유선 인터페이스를 찾지 못했습니다.")
-            }
-            primaryNetworkDetails()
-        case let .waitingForAddress(interface):
-            statusText("IP 주소 대기 · \(interface.name)", active: false)
-            description("네트워크 설정에서 USB 연결과 DHCP 상태를 확인하세요.")
-            primaryNetworkDetails(usbInterface: interface.name)
-        case let .addressed(interface):
-            statusText("IP 할당됨 · \(interface.name)", active: true)
-            primaryNetworkDetails(usbInterface: interface.name)
-            internetCheckDetails
-            Button("USB 인터넷 확인", action: model.checkInternet)
-                .buttonStyle(.borderedProminent)
-                .disabled(isChecking)
-                .help("USB 인터페이스를 사용해 Google 연결 확인 주소에 요청을 보냅니다.")
-        }
-    }
-
-    @ViewBuilder
-    private func primaryNetworkDetails(usbInterface: String? = nil) -> some View {
-        let paths = ["IPv4", "IPv6"].compactMap { family in
-            model.primaryNetworkInterfaces[family].map { name in
-                "\(family) \(name == usbInterface ? "갤럭시 USB" : "다른 연결 (\(name))")"
-            }
-        }
-        if !paths.isEmpty {
-            description("Mac 기본 연결 · \(paths.joined(separator: " / "))")
-        }
-    }
-
-    private var isChecking: Bool {
-        if case .checking = model.internetCheck { return true }
-        return false
-    }
-
-    @ViewBuilder
-    private var internetCheckDetails: some View {
-        switch model.internetCheck {
-        case .idle:
-            description("USB 경로로 인터넷에 접속할 수 있는지 확인하세요.")
-        case .checking:
-            description("USB 경로를 확인하는 중입니다.")
-        case let .passed(date):
-            description("USB 인터넷 확인됨 · \(date.formatted(date: .omitted, time: .shortened))")
-        case let .failed(outcome):
-            switch outcome {
-            case .noPath:
-                description("이 USB 인터페이스의 네트워크 경로를 찾지 못했습니다.")
-            case .unexpectedResponse:
-                description("연결 확인 서버에서 예상과 다른 응답을 받았습니다.")
-            case .failed:
-                description("USB 경로에서 인터넷에 연결하지 못했습니다. 갤럭시의 모바일 데이터와 테더링 상태를 확인하세요.")
-            case .passed:
-                EmptyView()
-            }
-        }
     }
 
     private var browser: some View {
@@ -323,13 +241,6 @@ struct ContentView: View {
                 .frame(width: 7, height: 7)
                 .accessibilityHidden(true)
         }
-    }
-
-    private func description(_ text: String) -> some View {
-        Text(text)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func icon(for kind: GalaxyEntry.Kind) -> String {

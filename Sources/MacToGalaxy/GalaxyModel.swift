@@ -14,13 +14,6 @@ final class GalaxyModel: ObservableObject {
         case ready
     }
 
-    enum CheckStatus {
-        case idle
-        case checking
-        case passed(Date)
-        case failed(USBInternetCheck.Outcome)
-    }
-
     struct Transfer {
         let name: String
         let control: TransferControl
@@ -28,9 +21,6 @@ final class GalaxyModel: ObservableObject {
 
     @Published private(set) var device: GalaxyDevice?
     @Published private(set) var fileStatus: FileStatus = .disconnected
-    @Published private(set) var tethering: TetheringState = .noDevice
-    @Published private(set) var primaryNetworkInterfaces: [String: String] = [:]
-    @Published private(set) var internetCheck: CheckStatus = .idle
     @Published private(set) var entries: [GalaxyEntry] = []
     @Published private(set) var folderPath: [GalaxyEntry] = []
     @Published private(set) var loadingFolder = false
@@ -43,8 +33,6 @@ final class GalaxyModel: ObservableObject {
     private let mtp = MTPClient()
     private var generation = UUID()
     private var nextConnectionAttempt: ContinuousClock.Instant?
-    private var probe: USBInternetCheck?
-    private var probeID: UUID?
     private var choosingDestination = false
 
     var selectedEntry: GalaxyEntry? { entries.first { $0.id == selection } }
@@ -155,36 +143,6 @@ final class GalaxyModel: ObservableObject {
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    func checkInternet() {
-        refreshDevices()
-        guard case let .addressed(interface) = tethering, probe == nil else { return }
-        internetCheck = .checking
-        let id = UUID()
-        probeID = id
-        let check = USBInternetCheck(interfaceName: interface.name) { [weak self] outcome in
-            Task { @MainActor in
-                guard let self else { return }
-                self.refreshDevices()
-                guard self.probeID == id else { return }
-                self.probe = nil
-                self.probeID = nil
-                switch outcome {
-                case .passed: self.internetCheck = .passed(Date())
-                default: self.internetCheck = .failed(outcome)
-                }
-            }
-        }
-        probe = check
-        check.start()
-    }
-
-    func openNetworkSettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension")!
-        if !NSWorkspace.shared.open(url) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
-        }
-    }
-
     func updateApp() {
         guard canUpdate else { return }
         isUpdating = true
@@ -229,23 +187,9 @@ final class GalaxyModel: ObservableObject {
     private func refreshDevices() {
         let devices = SystemUSB.devices()
         let connected = devices.count == 1 ? devices.first : nil
-        let interfaces = connected.map(SystemUSB.networkInterfaces) ?? []
-        let network = TetheringState(devices: devices, interfaces: interfaces)
-        let primaryInterfaces = interfaces.isEmpty && (connected?.networkModes.isEmpty ?? true)
-            ? [:] : SystemUSB.primaryNetworkInterfaces()
-        if primaryInterfaces != primaryNetworkInterfaces {
-            primaryNetworkInterfaces = primaryInterfaces
-        }
         let deviceChanged = connected?.registryID != device?.registryID || connected?.productID != device?.productID
         let usbConfigurationChanged = deviceChanged || connected?.interfaceIDs != device?.interfaceIDs
 
-        if usbConfigurationChanged || network != tethering {
-            probe?.cancel()
-            probe = nil
-            probeID = nil
-            internetCheck = .idle
-            tethering = network
-        }
         if connected != device { device = connected }
 
         if usbConfigurationChanged {
