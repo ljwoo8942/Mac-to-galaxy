@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import GalaxyCore
 import IOKit
+import SystemConfiguration
 
 struct SystemUSB {
     static func devices() -> [GalaxyDevice] {
@@ -64,6 +65,19 @@ struct SystemUSB {
             guard usbDeviceID(above: entry) == device.registryID else { return nil }
             return USBNetworkInterface(name: name, deviceID: device.registryID, isUp: isUp, addresses: addresses[name] ?? [])
         }
+    }
+
+    static func primaryNetworkInterfaces() -> [String: String] {
+        let ipv4 = "State:/Network/Global/IPv4"
+        let ipv6 = "State:/Network/Global/IPv6"
+        let keys = [ipv4, ipv6] as CFArray
+        guard let states = SCDynamicStoreCopyMultiple(nil, keys, nil) as? [String: [String: Any]] else { return [:] }
+
+        let primaryInterface = kSCDynamicStorePropNetPrimaryInterface as String
+        var interfaces: [String: String] = [:]
+        interfaces["IPv4"] = states[ipv4]?[primaryInterface] as? String
+        interfaces["IPv6"] = states[ipv6]?[primaryInterface] as? String
+        return interfaces
     }
 
     private static func usableAddress(_ address: UnsafePointer<sockaddr>) -> String? {

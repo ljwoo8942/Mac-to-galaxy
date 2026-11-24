@@ -29,6 +29,7 @@ final class GalaxyModel: ObservableObject {
     @Published private(set) var device: GalaxyDevice?
     @Published private(set) var fileStatus: FileStatus = .disconnected
     @Published private(set) var tethering: TetheringState = .noDevice
+    @Published private(set) var primaryNetworkInterfaces: [String: String] = [:]
     @Published private(set) var internetCheck: CheckStatus = .idle
     @Published private(set) var entries: [GalaxyEntry] = []
     @Published private(set) var folderPath: [GalaxyEntry] = []
@@ -191,6 +192,11 @@ final class GalaxyModel: ObservableObject {
         let connected = devices.count == 1 ? devices.first : nil
         let interfaces = connected.map(SystemUSB.networkInterfaces) ?? []
         let network = TetheringState(devices: devices, interfaces: interfaces)
+        let primaryInterfaces = interfaces.isEmpty && (connected?.networkModes.isEmpty ?? true)
+            ? [:] : SystemUSB.primaryNetworkInterfaces()
+        if primaryInterfaces != primaryNetworkInterfaces {
+            primaryNetworkInterfaces = primaryInterfaces
+        }
         let deviceChanged = connected?.registryID != device?.registryID || connected?.productID != device?.productID
         let usbConfigurationChanged = deviceChanged || connected?.interfaceIDs != device?.interfaceIDs
 

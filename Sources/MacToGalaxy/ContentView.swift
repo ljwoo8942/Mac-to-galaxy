@@ -94,17 +94,36 @@ struct ContentView: View {
         case let .noNetworkInterface(modes):
             let names = modes.map(\.rawValue).sorted().joined(separator: ", ")
             statusText("\(names) 감지됨", active: false)
-            description("macOS 네트워크 인터페이스를 찾지 못했습니다. 네트워크 설정에서 USB 연결을 확인하세요.")
+            if modes == [.rndis] {
+                description("USB 테더링은 켜져 있습니다. 이 Mac에 RNDIS용 유선 인터페이스가 없어 USB 인터넷을 사용할 수 없습니다.")
+            } else {
+                description("macOS에서 갤럭시의 USB 유선 인터페이스를 찾지 못했습니다.")
+            }
+            primaryNetworkDetails()
         case let .waitingForAddress(interface):
             statusText("IP 주소 대기 · \(interface.name)", active: false)
             description("네트워크 설정에서 USB 연결과 DHCP 상태를 확인하세요.")
+            primaryNetworkDetails(usbInterface: interface.name)
         case let .addressed(interface):
             statusText("IP 할당됨 · \(interface.name)", active: true)
+            primaryNetworkDetails(usbInterface: interface.name)
             internetCheckDetails
             Button("USB 인터넷 확인", action: model.checkInternet)
                 .buttonStyle(.borderedProminent)
                 .disabled(isChecking)
                 .help("USB 인터페이스를 사용해 Google 연결 확인 주소에 요청을 보냅니다.")
+        }
+    }
+
+    @ViewBuilder
+    private func primaryNetworkDetails(usbInterface: String? = nil) -> some View {
+        let paths = ["IPv4", "IPv6"].compactMap { family in
+            model.primaryNetworkInterfaces[family].map { name in
+                "\(family) \(name == usbInterface ? "갤럭시 USB" : "다른 연결 (\(name))")"
+            }
+        }
+        if !paths.isEmpty {
+            description("Mac 기본 연결 · \(paths.joined(separator: " / "))")
         }
     }
 
